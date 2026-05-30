@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>给你的心动留言</title>
+<style>
+/* ========== 横屏提示遮罩 ========== */
+#landscape-overlay {
+  display: none;
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(135deg, #fff0f5 0%, #ffe4e9 100%);
+  z-index: 99999;
+  flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+}
+#landscape-overlay .rotate-icon { font-size: 64px; margin-bottom: 20px; animation: heartbeat 0.8s ease-in-out infinite; }
+#landscape-overlay .rotate-text { font-size: 20px; font-weight: bold; color: #d63384; }
+
+@media (orientation: landscape) and (max-width: 768px) {
+  #landscape-overlay { display: flex; }
+  #loading-overlay,
+  #qa-page,
+  #heart-page,
+  #sticker-overlay,
+  #dislike-hint,
+  #particles-canvas,
+  #clear-btn,
+  #heart-counter { display: none !important; }
+}
+
+/* ========== 全局重置 ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+/* ========== 加载动画 ========== */
+#loading-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(135deg, #fff0f5 0%, #ffe4e9 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 10000;
+  transition: opacity 400ms ease;
+}
+#loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+.loading-heart {
+  position: relative;
+  width: 70px; height: 65px;
+  animation: heartbeat 0.6s ease-in-out infinite;
+}
+.loading-heart::before,
+.loading-heart::after {
+  content: '';
+  position: absolute; top: 0;
+  width: 38px; height: 58px;
+  border-radius: 30px 30px 0 0;
+  background: #ff6b8a;
+}
+.loading-heart::before { left: 38px; transform: rotate(-45deg); transform-origin: 0 100%; }
+.loading-heart::after  { left: 0;    transform: rotate(45deg);  transform-origin: 100% 100%; }
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  15% { transform: scale(1.22); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.12); }
+  60% { transform: scale(1); }
+}
+
+#loading-progress {
+  width: 160px; height: 6px; margin-top: 32px;
+  background: rgba(255,182,193,0.4); border-radius: 10px; overflow: hidden;
+}
+#loading-progress-fill {
+  width: 0%; height: 100%;
+  background: linear-gradient(90deg, #ffb6c1, #ff6b8a);
+  border-radius: 10px; transition: width 80ms linear;
+}
+
+/* ========== 背景飘落粒子画布 ========== */
+#particles-canvas {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 11; pointer-events: none;
+}
+
+/* ========== 按钮通用 ========== */
+button {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none;
+  transition: transform 100ms ease, box-shadow 100ms ease, filter 100ms ease;
+  border: none; outline: none; cursor: pointer;
+  position: relative; overflow: hidden;
+}
+button:active { transform: scale(0.95); filter: brightness(1.12); }
+button .ripple {
+  position: absolute; border-radius: 50%;
+  background: rgba(255,255,255,0.45);
+  transform: scale(0);
+  animation: rippleAnim 500ms ease-out forwards;
+  pointer-events: none;
+}
+@keyframes rippleAnim { to { transform: scale(4); opacity: 0; } }
+
+/* ========== 页面容器 ========== */
+.page {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  transition: opacity 300ms ease;
+}
+
+/* ========== 第一页：问答界面 ========== */
+#qa-page {
+  background: linear-gradient(135deg, #fff0f5 0%, #ffe4e9 100%);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10;
+}
+#qa-page.hidden { opacity: 0; pointer-events: none; }
+
+#qa-card {
+  position: relative; width: 85vw; max-width: 360px; background: #fff;
+  border-radius: 20px; box-shadow: 0 10px 30px rgba(214, 51, 132, 0.15);
+  padding: 40px 20px 30px 20px; text-align: center; overflow: visible; z-index: 1;
+}
+#qa-card::before {
+  content: ''; position: absolute;
+  top: -3px; left: -3px; right: -3px; bottom: -3px; border-radius: 23px;
+  background: linear-gradient(45deg, #ffb6c1, #ff69b4, #ffb6c1, #ff1493, #ffb6c1);
+  background-size: 400% 400%; z-index: -1;
+  animation: borderFlow 3s ease 1 forwards;
+}
+@keyframes borderFlow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+#qa-question {
+  font-size: 26px; font-weight: bold;
+  background: linear-gradient(135deg, #c2185b, #d63384, #c2185b);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; margin-bottom: 30px;
+  filter: drop-shadow(0 0 6px rgba(255,105,180,0.4));
+}
+
+#qa-buttons { display: flex; justify-content: center; gap: 30px; height: 48px; }
+
+.btn-like, .btn-dislike {
+  width: 110px; height: 48px; border-radius: 12px;
+  font-size: 16px; font-weight: bold; flex-shrink: 0;
+}
+.btn-like { background: #e91e63; color: #fff; }
+.btn-dislike { background: #c4a0a8; color: #fff; }
+.btn-dislike.moving {
+  position: fixed; z-index: 100; transition: left 200ms ease, top 200ms ease;
+}
+
+/* 不喜欢提示浮层 */
+#dislike-hint {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  z-index: 200; background: rgba(255,255,255,0.94); color: #c0395b;
+  box-shadow: 0 4px 20px rgba(180,60,80,0.25);
+  box-shadow: 0 4px 20px rgba(180,60,80,0.25);
+  padding: 12px 24px; border-radius: 20px; font-size: 16px; font-weight: bold;
+  opacity: 0; pointer-events: none; transition: opacity 300ms ease; white-space: nowrap;
+}
+#dislike-hint.show { opacity: 1; }
+
+/* ========== 贴纸弹窗 ========== */
+#sticker-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center; padding-bottom: 18vh;
+  z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 200ms ease;
+}
+#sticker-overlay.show { opacity: 1; pointer-events: auto; }
+#sticker-content { display: flex; flex-direction: column; align-items: center; }
+#sticker-overlay img {
+  width: 100%; max-width: 300px; height: auto; object-fit: contain;
+  transition: transform 100ms ease;
+}
+#sticker-overlay:active img { transform: scale(0.95); }
+#sticker-text {
+  display: inline-block; font-size: 16px; font-weight: bold; color: #d63384;
+  margin-top: 24px; text-align: center; background: rgba(255,255,255,0.88);
+  padding: 10px 22px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* ========== 第二页：爱心卡片界面 ========== */
+#heart-page {
+  background: linear-gradient(135deg, #fff0f5 0%, #ffe4e9 100%);
+  z-index: 5; opacity: 0; pointer-events: none;
+}
+#heart-page.show { opacity: 1; pointer-events: auto; }
+
+#clear-btn {
+  position: fixed; top: 20px; right: 20px; z-index: 9999;
+  background: #fff; color: #dc3545; border-radius: 12px; padding: 10px 18px;
+  font-size: 14px; font-weight: bold; box-shadow: 0 4px 12px rgba(220, 53, 69, 0.2);
+}
+
+#heart-container {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10;
+}
+
+/* 缩小后的爱心小框 */
+.heart-card {
+  position: absolute;
+  width: 90px; height: 36px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 13px; font-weight: bold; opacity: 1;
+  transition: left 400ms ease, top 400ms ease, transform 400ms ease, opacity 350ms ease, filter 400ms ease;
+  pointer-events: none;
+  overflow: hidden; white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
+.heart-card.appear {
+  animation: cardAppear 200ms ease forwards;
+}
+.heart-card.fading { opacity: 0; }
+.heart-card.dimmed { opacity: 0.25; }
+
+/* 随机阶段的卡片可点击 */
+.heart-card.random-card {
+  pointer-events: auto;
+}
+
+@keyframes cardAppear {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+}
+
+/* 桌面端卡片放大 */
+@media (min-width: 769px) {
+  .heart-card {
+    width: 120px; height: 46px; border-radius: 10px;
+    font-size: 16px;
+  }
+}
+
+/* 随机生成弹窗动画 */
+@keyframes popIn {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+  60% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.heart-card.pop-in {
+  animation: popIn 350ms ease-out forwards;
+}
+
+.heart-card.shaking {
+  animation: shake 300ms ease-in-out infinite;
+}
+@keyframes shake {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  25% { transform: translate(-52%, -48%) scale(1.03); }
+  50% { transform: translate(-48%, -52%) scale(1.03); }
+  75% { transform: translate(-52%, -50%) scale(1.03); }
+}
+
+.card-particle {
+  position: fixed; pointer-events: none; font-size: 14px; z-index: 10001;
+  animation: particleFly 700ms ease-out forwards;
+}
+@keyframes particleFly {
+  0% { opacity: 1; transform: translate(0, 0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--px), var(--py)) scale(0.3); }
+}
+
+#clear-message {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 20; opacity: 0; pointer-events: none; transition: opacity 300ms ease;
+}
+#clear-message.show { opacity: 1; pointer-events: auto; }
+#clear-message .msg-main {
+  font-size: 22px; font-weight: bold;
+  background: linear-gradient(135deg, #ff69b4, #d63384);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; margin-bottom: 12px;
+}
+#clear-message .msg-sub { font-size: 14px; color: #666; }
+</style>
+</head>
+<body>
+
+<!-- ========== 横屏提示 ========== -->
+<div id="landscape-overlay">
+  <div class="rotate-icon">📱</div>
+  <div class="rotate-text">请竖屏使用哦～</div>
+</div>
+
+<div id="loading-overlay">
+  <div class="loading-heart"></div>
+  <div id="loading-progress"><div id="loading-progress-fill"></div></div>
+</div>
+
+<canvas id="particles-canvas"></canvas>
+
+<div class="page" id="qa-page">
+  <div id="qa-card">
+    <div id="qa-question">你喜欢我吗？</div>
+    <div id="qa-buttons">
+      <button class="btn-like" id="btn-like">喜欢</button>
+      <button class="btn-dislike" id="btn-dislike">不喜欢</button>
+    </div>
+  </div>
+</div>
+
+<div id="dislike-hint"></div>
+
+<div id="sticker-overlay">
+  <div id="sticker-content">
+    <img src="data:image/jpeg;base64,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" alt="委屈">
+    <p id="sticker-text">不可以不喜欢我哦</p>
+  </div>
+</div>
+
+<div class="page" id="heart-page">
+  <button id="clear-btn">全部清除</button>
+  <div id="heart-container"></div>
+  <div id="clear-message">
+    <div class="msg-main">❤️ 所有的爱都收到啦 ❤️</div>
+    <div class="msg-sub">刷新页面可以再看一次哦</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var qaPage       = document.getElementById('qa-page');
+  var heartPage    = document.getElementById('heart-page');
+  var qaCard       = document.getElementById('qa-card');
+  var btnLike      = document.getElementById('btn-like');
+  var btnDislike   = document.getElementById('btn-dislike');
+  var stickerOverlay = document.getElementById('sticker-overlay');
+  var heartContainer = document.getElementById('heart-container');
+  var clearBtn     = document.getElementById('clear-btn');
+  var clearMsg     = document.getElementById('clear-message');
+  var dislikeHint  = document.getElementById('dislike-hint');
+  var loadingOverlay = document.getElementById('loading-overlay');
+  var particlesCanvas = document.getElementById('particles-canvas');
+
+  var dislikeCount = 0;
+  var likeRect = null;
+  var genTimer = null;
+  var allCards = [];
+  var selectedCard = null;
+  var lastClickTime = 0;
+  var hintTimer = null;
+  var phase = 'idle';           // assembling | pause | disappearing | random
+  var phaseTimer = null;
+  var randomSpawnTimer = null;
+
+  var sentences = [
+    "好好吃饭", "天天开心", "我喜欢你", "我爱你", "你是最棒的",
+    "每天都要笑", "记得想我", "别熬夜哦", "抱抱", "我的小太阳",
+    "有你真好", "永远在一起", "你是我的光", "要幸福啊", "亲亲",
+    "你最可爱了", "你是我唯一", "超喜欢你", "只想对你好", "未来都是你",
+    "好梦", "暖你一整天", "你是我的甜心", "生气也要理我", "不许不开心",
+    "永远宠你", "我的小可爱", "心里全是你", "遇见你好幸运", "余生都是你",
+    "多喝水呀", "我想你了", "你笑起来最好看", "我会一直陪着你", "开心每一天"
+  ];
+
+  var dislikeHints = [
+    "再好好想想～",
+    "不许拒绝我哦",
+    "真的不考虑一下吗",
+    "最后一次机会啦 呜呜"
+  ];
+
+  // 多色调色板
+  var cardColors = [
+    { bg: 'linear-gradient(135deg, #ffb6c1, #ff9ab5)', hue: 'pink' },
+    { bg: 'linear-gradient(135deg, #d4b8d4, #c9a0dc)', hue: 'purple' },
+    { bg: 'linear-gradient(135deg, #ffeaa7, #fdcb6e)', hue: 'yellow' },
+    { bg: 'linear-gradient(135deg, #aec8e8, #81b0dc)', hue: 'blue' },
+    { bg: 'linear-gradient(135deg, #ffd1dc, #ffb3c6)', hue: 'pink2' },
+    { bg: 'linear-gradient(135deg, #e8d5e0, #d4b8cc)', hue: 'purple2' },
+    { bg: 'linear-gradient(135deg, #fce4c8, #f8d5a3)', hue: 'yellow2' },
+    { bg: 'linear-gradient(135deg, #c5d5f2, #a3c4e8)', hue: 'blue2' }
+  ];
+
+  function getCardColor(lastHue) {
+    var available = cardColors.filter(function(c) { return c.hue !== lastHue; });
+    if (available.length === 0) available = cardColors;
+    return available[Math.floor(Math.random() * available.length)];
+  }
+
+  function canClick(gap) {
+    gap = gap || 300;
+    var now = Date.now();
+    if (now - lastClickTime < gap) return false;
+    lastClickTime = now;
+    return true;
+  }
+
+  function addRipple(e, btn) {
+    var rect = btn.getBoundingClientRect();
+    var size = Math.max(rect.width, rect.height);
+    var ripple = document.createElement('span');
+    ripple.className = 'ripple';
+    ripple.style.width = ripple.style.height = size + 'px';
+    ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+    ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+    btn.appendChild(ripple);
+    setTimeout(function() { if (ripple.parentNode) ripple.parentNode.removeChild(ripple); }, 500);
+  }
+
+  function getLikeRect() {
+    var lr = btnLike.getBoundingClientRect();
+    return { left: lr.left, top: lr.top, right: lr.right, bottom: lr.bottom, width: lr.width, height: lr.height };
+  }
+
+  function getDislikeRect(x, y) {
+    return { left: x, top: y, right: x + 110, bottom: y + 48, width: 110, height: 48 };
+  }
+
+  function rectsOverlap(r1, r2, margin) {
+    margin = margin || 0;
+    return !(r1.right + margin <= r2.left || r1.left >= r2.right + margin ||
+             r1.bottom + margin <= r2.top || r1.top >= r2.bottom + margin);
+  }
+
+  function randomDislikePos() {
+    var sw = window.innerWidth;
+    var sh = window.innerHeight;
+    var safeMargin = 5;
+    var minX = safeMargin;
+    var maxX = sw - 110 - safeMargin;
+    var minY = sh * 0.27;
+    var maxY = sh * 0.78 - 48;
+    if (maxY < minY) { maxY = minY; }
+    var lr = getLikeRect(); likeRect = lr;
+    var questionEl = document.getElementById('qa-question');
+    var qr = questionEl.getBoundingClientRect();
+    var safeDist = 60;
+    var textMargin = 15;
+    var maxAttempts = 2000;
+    for (var i = 0; i < maxAttempts; i++) {
+      var x = minX + Math.random() * (maxX - minX);
+      var y = minY + Math.random() * (maxY - minY);
+      var dr = getDislikeRect(x, y);
+      if (!rectsOverlap(dr, lr, safeDist) && !rectsOverlap(dr, qr, textMargin)) {
+        return { left: x, top: y };
+      }
+    }
+    var fallbackX = Math.max(minX, Math.max(lr.right, qr.right) + safeDist);
+    if (fallbackX + 110 < sw - safeMargin) {
+      return { left: fallbackX, top: minY + (maxY - minY) / 2 };
+    }
+    return { left: minX + (maxX - minX) / 2, top: minY + (maxY - minY) / 2 };
+  }
+
+  function showDislikeHint() {
+    if (hintTimer) { clearTimeout(hintTimer); }
+    var txt = dislikeHints[dislikeCount - 1] || '';
+    dislikeHint.textContent = txt;
+    dislikeHint.classList.add('show');
+    hintTimer = setTimeout(function() {
+      dislikeHint.classList.remove('show');
+      hintTimer = null;
+    }, 1000);
+  }
+
+  // ========== "不喜欢" 按钮 ==========
+  btnDislike.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (!canClick(350)) return;
+    addRipple(e, btnDislike);
+    dislikeCount++;
+    if (!likeRect) { likeRect = getLikeRect(); }
+    if (dislikeCount >= 1 && dislikeCount <= 4) { showDislikeHint(); }
+    if (dislikeCount >= 5) {
+      if (hintTimer) { clearTimeout(hintTimer); dislikeHint.classList.remove('show'); }
+      stickerOverlay.classList.add('show');
+      return;
+    }
+    if (!btnDislike.classList.contains('moving')) {
+      var cr = qaCard.getBoundingClientRect();
+      var dr = btnDislike.getBoundingClientRect();
+      btnDislike.style.transition = 'none';
+      btnDislike.style.left = dr.left + 'px';
+      btnDislike.style.top = dr.top + 'px';
+      btnDislike.classList.add('moving');
+      btnDislike.offsetHeight;
+      btnDislike.style.transition = '';
+      var lr2 = btnLike.getBoundingClientRect();
+      btnLike.style.position = 'absolute';
+      btnLike.style.left = (lr2.left - cr.left) + 'px';
+      btnLike.style.top = (lr2.top - cr.top) + 'px';
+      btnLike.style.margin = '0';
+    }
+    var pos = randomDislikePos();
+    btnDislike.style.left = pos.left + 'px';
+    btnDislike.style.top = pos.top + 'px';
+  });
+
+  // ========== 贴纸弹窗 ==========
+  stickerOverlay.addEventListener('click', function() {
+    stickerOverlay.classList.remove('show');
+    dislikeCount = 0; likeRect = null;
+    if (hintTimer) { clearTimeout(hintTimer); dislikeHint.classList.remove('show'); }
+    if (btnDislike.classList.contains('moving')) {
+      btnDislike.style.transition = 'none';
+      btnDislike.classList.remove('moving');
+      btnDislike.style.left = ''; btnDislike.style.top = ''; btnDislike.style.transition = '';
+      btnLike.style.position = ''; btnLike.style.left = ''; btnLike.style.top = ''; btnLike.style.margin = '';
+    }
+  });
+
+  // ========== "喜欢" 按钮 ==========
+  btnLike.addEventListener('click', function(e) {
+    if (!canClick(500)) return;
+    addRipple(e, btnLike);
+    if (!likeRect) { likeRect = getLikeRect(); }
+    qaPage.classList.add('hidden');
+    heartPage.classList.add('show');
+    setTimeout(generateHeart, 350);
+  });
+
+  // ========== 自适应卡片尺寸 ==========
+  function getCardSize() {
+    var sw = window.innerWidth;
+    if (sw >= 769) return { w: 120, h: 46 };
+    return { w: 90, h: 36 };
+  }
+
+  // ========== 爱心生成（阶段1：组装） ==========
+  function heartX(t) { return 16 * Math.pow(Math.sin(t), 3); }
+  function heartY(t) { return 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t); }
+
+  function stopAllTimers() {
+    if (genTimer) { clearTimeout(genTimer); genTimer = null; }
+    if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = null; }
+    if (randomSpawnTimer) { clearInterval(randomSpawnTimer); randomSpawnTimer = null; }
+  }
+
+  function clearAllCardDOM() {
+    allCards.forEach(function(c) { if (c.parentNode) c.parentNode.removeChild(c); });
+    allCards = [];
+    selectedCard = null;
+  }
+
+  function generateHeart() {
+    stopAllTimers();
+    clearAllCardDOM();
+    clearMsg.classList.remove('show');
+    phase = 'assembling';
+
+    var sw = window.innerWidth;
+    var sh = window.innerHeight;
+    var scale = Math.min(sw * 0.85, sh * 0.75) / 32;
+    var centerX = sw / 2;
+    var centerY = sh / 2 - scale * 6;
+    var cs = getCardSize();
+    var cardWidth = cs.w;
+    var spacing = cardWidth / 3;
+    var sampleCount = 3000;
+    var points = [];
+    var prevSx = null, prevSy = null, cumLen = 0;
+
+    for (var i = 0; i <= sampleCount; i++) {
+      var t = (i / sampleCount) * 2 * Math.PI;
+      var mx = heartX(t);
+      var my = heartY(t);
+      var sx = centerX + scale * mx;
+      var sy = centerY - scale * my;
+      if (prevSx !== null) { cumLen += Math.sqrt((sx-prevSx)*(sx-prevSx) + (sy-prevSy)*(sy-prevSy)); }
+      points.push({ t: t, mx: mx, my: my, sx: sx, sy: sy, cumLen: cumLen });
+      prevSx = sx; prevSy = sy;
+    }
+
+    var totalLen = cumLen;
+    var cardCount = Math.floor(totalLen / spacing);
+    if (cardCount < 1) cardCount = 1;
+    if (cardCount > 250) cardCount = 250;
+
+    var cardData = [];
+    var lastTextIdx = -1;
+    var lastColorHue = null;
+
+    for (var c = 0; c < cardCount; c++) {
+      var targetLen = c * spacing;
+      var idx = 0;
+      for (var j = 0; j < points.length; j++) { if (points[j].cumLen >= targetLen) { idx = j; break; } }
+      if (idx === 0) idx = 1;
+      if (idx >= points.length) idx = points.length - 1;
+      var p0 = points[idx - 1], p1 = points[idx];
+      var segLen = p1.cumLen - p0.cumLen;
+      var frac = segLen > 0 ? (targetLen - p0.cumLen) / segLen : 0;
+      if (frac < 0) frac = 0; if (frac > 1) frac = 1;
+      var tt = p0.t + frac * (p1.t - p0.t);
+      var mmx = heartX(tt), mmy = heartY(tt);
+      var ssx = centerX + scale * mmx, ssy = centerY - scale * mmy;
+
+      var textIdx, attempts = 0;
+      do { textIdx = Math.floor(Math.random() * sentences.length); attempts++; if (attempts > 50) break; }
+      while (textIdx === lastTextIdx && sentences.length > 1);
+      lastTextIdx = textIdx;
+
+      var colorInfo = getCardColor(lastColorHue);
+      lastColorHue = colorInfo.hue;
+
+      cardData.push({ sx: ssx, sy: ssy, text: sentences[textIdx], zIndex: c + 1, bg: colorInfo.bg, index: c });
+    }
+
+    var genIndex = 0;
+    function nextCard() {
+      if (genIndex >= cardData.length) {
+        genTimer = null;
+        phase = 'pause';
+        // 阶段2：停顿2秒后进入消失阶段
+        phaseTimer = setTimeout(startDisappearing, 1000);
+        return;
+      }
+      if (clearMsg.classList.contains('show')) { genTimer = null; return; }
+
+      var d = cardData[genIndex];
+      var card = document.createElement('div');
+      card.className = 'heart-card';
+      card.style.background = d.bg;
+      card.style.left = d.sx + 'px';
+      card.style.top = d.sy + 'px';
+      card.style.transform = 'translate(-50%, -50%) scale(0.8)';
+      card.style.zIndex = d.zIndex;
+      card.textContent = d.text;
+      card.dataset.cardIndex = d.index;
+      card.dataset.origLeft = d.sx;
+      card.dataset.origTop = d.sy;
+      card.dataset.origZIndex = d.zIndex;
+
+      heartContainer.appendChild(card);
+      allCards.push(card);
+
+      requestAnimationFrame(function() {
+        card.classList.add('appear');
+        card.style.transform = 'translate(-50%, -50%) scale(1)';
+      });
+
+      genIndex++;
+      genTimer = setTimeout(nextCard, 40);
+    }
+    nextCard();
+  }
+
+  // ========== 阶段3：逐个消失 ==========
+  function startDisappearing() {
+    if (phase !== 'pause') return;
+    phase = 'disappearing';
+    var disappearIndex = 0;
+    var cardsToRemove = allCards.slice(); // 按生成顺序
+
+    function disappearNext() {
+      if (disappearIndex >= cardsToRemove.length) {
+        // 全部消失完毕，进入随机生成阶段
+        allCards.forEach(function(c) { if (c.parentNode) c.parentNode.removeChild(c); });
+        allCards = [];
+        selectedCard = null;
+        startRandomSpawning();
+        return;
+      }
+      var card = cardsToRemove[disappearIndex];
+      if (card && card.parentNode) {
+        card.classList.add('fading');
+      }
+      disappearIndex++;
+      phaseTimer = setTimeout(disappearNext, 20);
+    }
+    disappearNext();
+  }
+
+  // ========== 阶段4：随机生成（纯随机，自适应数量） ==========
+  var RANDOM_TOTAL = 0;
+  var spawnedCount = 0;
+
+  function startRandomSpawning() {
+    phase = 'random';
+    var sw = window.innerWidth, sh = window.innerHeight;
+    if (sw < 769) {
+      RANDOM_TOTAL = 150;
+    } else {
+      var area = sw * sh;
+      RANDOM_TOTAL = Math.floor(area / 5000);
+      if (RANDOM_TOTAL < 200) RANDOM_TOTAL = 200;
+      if (RANDOM_TOTAL > 450) RANDOM_TOTAL = 450;
+    }
+    spawnedCount = 0;
+    spawnBatch();
+    randomSpawnTimer = setInterval(spawnBatch, 100);
+  }
+
+  function spawnBatch() {
+    if (phase !== 'random') return;
+    if (spawnedCount >= RANDOM_TOTAL) {
+      clearInterval(randomSpawnTimer);
+      randomSpawnTimer = null;
+      return;
+    }
+    var batch = 5 + Math.floor(Math.random() * 6);
+    for (var i = 0; i < batch; i++) {
+      if (spawnedCount >= RANDOM_TOTAL) break;
+      createRandomCard();
+      spawnedCount++;
+    }
+  }
+
+  function createRandomCard() {
+    var sw = window.innerWidth, sh = window.innerHeight;
+    var cs = getCardSize();
+    var cardW = cs.w, cardH = cs.h;
+    var minX = cardW / 2, maxX = sw - cardW / 2;
+    var minY = cardH / 2, maxY = sh - cardH / 2;
+    var x = minX + Math.random() * (maxX - minX);
+    var y = minY + Math.random() * (maxY - minY);
+
+    var textIdx = Math.floor(Math.random() * sentences.length);
+    var colorInfo = cardColors[Math.floor(Math.random() * cardColors.length)];
+
+    var card = document.createElement('div');
+    card.className = 'heart-card random-card pop-in';
+    card.style.background = colorInfo.bg;
+    card.style.left = x + 'px';
+    card.style.top = y + 'px';
+    card.style.transform = 'translate(-50%, -50%) scale(1)';
+    card.style.zIndex = Math.floor(Math.random() * 500 + 100);
+    card.textContent = sentences[textIdx];
+
+    heartContainer.appendChild(card);
+    allCards.push(card);
+  }
+
+  // ========== 卡片点击交互（仅随机阶段） ==========
+  function selectCard(card) {
+    // 先移除 pop-in 动画，避免动画 fill 阻塞 transform 过渡
+    card.classList.remove('pop-in');
+    if (!card.dataset.savedLeft) {
+      card.dataset.savedLeft = card.style.left;
+      card.dataset.savedTop = card.style.top;
+      card.dataset.savedTransform = card.style.transform;
+      card.dataset.savedZIndex = card.style.zIndex;
+    }
+    var sw = window.innerWidth, sh = window.innerHeight;
+    card.style.willChange = 'transform, left, top';
+    card.style.left = (sw / 2) + 'px';
+    card.style.top = (sh / 2) + 'px';
+    card.style.transform = 'translate(-50%, -50%) scale(2.0)';
+    card.style.zIndex = '10000';
+    selectedCard = card;
+
+    allCards.forEach(function(c) {
+      if (c !== card && !c.classList.contains('fading')) c.classList.add('dimmed');
+    });
+  }
+
+  function resetCardPosition(card) {
+    card.style.willChange = 'auto';
+    if (card.dataset.savedLeft) {
+      card.style.left = card.dataset.savedLeft;
+      card.style.top = card.dataset.savedTop;
+      card.style.transform = card.dataset.savedTransform;
+      card.style.zIndex = card.dataset.savedZIndex;
+      delete card.dataset.savedLeft; delete card.dataset.savedTop;
+      delete card.dataset.savedTransform; delete card.dataset.savedZIndex;
+    }
+    card.classList.remove('dimmed');
+    allCards.forEach(function(c) { c.classList.remove('dimmed'); });
+  }
+
+  heartContainer.addEventListener('click', function(e) {
+    if (phase !== 'random') return;
+    var card = e.target;
+    if (!card.classList.contains('random-card')) return;
+    if (card.classList.contains('fading')) return;
+    if (!canClick(300)) return;
+
+    if (card === selectedCard) {
+      resetCardPosition(card);
+      selectedCard = null;
+    } else {
+      if (selectedCard) { resetCardPosition(selectedCard); }
+      selectCard(card);
+    }
+  });
+
+  // ========== 长按粒子特效 ==========
+  var longPressTimer = null, longPressCard = null;
+  heartContainer.addEventListener('touchstart', function(e) {
+    var card = e.target;
+    if (!card.classList.contains('heart-card')) return;
+    if (card.classList.contains('fading')) return;
+    longPressCard = card;
+    longPressTimer = setTimeout(function() {
+      if (longPressCard) { longPressCard.classList.add('shaking'); spawnParticles(longPressCard); }
+    }, 500);
+  }, { passive: true });
+  heartContainer.addEventListener('touchend', function() {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (longPressCard) { longPressCard.classList.remove('shaking'); longPressCard = null; }
+  });
+  heartContainer.addEventListener('touchmove', function() {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (longPressCard) { longPressCard.classList.remove('shaking'); longPressCard = null; }
+  });
+
+  function spawnParticles(card) {
+    var rect = card.getBoundingClientRect();
+    var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    var emojis = ['💕', '💖', '✨', '💗', '🌸'];
+    for (var i = 0; i < 6; i++) {
+      var p = document.createElement('span');
+      p.className = 'card-particle';
+      p.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+      p.style.left = cx + 'px'; p.style.top = cy + 'px';
+      p.style.setProperty('--px', (Math.random() * 80 - 40) + 'px');
+      p.style.setProperty('--py', (Math.random() * -60 - 20) + 'px');
+      document.body.appendChild(p);
+      setTimeout(function() { if (p.parentNode) p.parentNode.removeChild(p); }, 700);
+    }
+  }
+
+  // ========== "全部清除" ==========
+  clearBtn.addEventListener('click', function(e) {
+    if (!canClick(500)) return;
+    addRipple(e, clearBtn);
+    stopAllTimers();
+    if (selectedCard) { resetCardPosition(selectedCard); selectedCard = null; }
+    allCards.forEach(function(card) { card.classList.add('fading'); });
+    phase = 'idle';
+    setTimeout(function() {
+      allCards.forEach(function(card) { if (card.parentNode) card.parentNode.removeChild(card); });
+      allCards = [];
+      clearMsg.classList.add('show');
+    }, 350);
+  });
+
+  // ========== resize ==========
+  var resizeTimeout;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimeout);
+    if (heartPage.classList.contains('show') && !clearMsg.classList.contains('show')) {
+      resizeTimeout = setTimeout(function() {
+        stopAllTimers();
+        clearAllCardDOM();
+        generateHeart();
+      }, 400);
+    }
+  });
+
+  // ========== 全局禁用 ==========
+  document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+  document.addEventListener('dblclick', function(e) { e.preventDefault(); });
+  document.addEventListener('selectstart', function(e) { e.preventDefault(); });
+
+  // ========== 背景粒子 ==========
+  (function initParticles() {
+    var canvas = particlesCanvas, ctx = canvas.getContext('2d');
+    var particles = [], MAX = 25;
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    resize(); window.addEventListener('resize', resize);
+    var icons = ['❤️', '💕', '⭐', '✨', '💗', '🌟'];
+    function createParticle() {
+      return { x: Math.random() * canvas.width, y: -20, size: 8 + Math.random() * 14,
+        speed: 0.3 + Math.random() * 0.7, opacity: 0.12 + Math.random() * 0.22,
+        drift: (Math.random() - 0.5) * 0.5, text: icons[Math.floor(Math.random() * icons.length)] };
+    }
+    for (var i = 0; i < MAX; i++) { var p = createParticle(); p.y = Math.random() * canvas.height; particles.push(p); }
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (var i = 0; i < particles.length; i++) {
+        var p = particles[i]; p.y += p.speed; p.x += p.drift;
+        if (p.y > canvas.height + 30) { particles[i] = createParticle(); p = particles[i]; }
+        if (p.x < -30) p.x = canvas.width + 30; if (p.x > canvas.width + 30) p.x = -30;
+        ctx.save(); ctx.globalAlpha = p.opacity;
+        ctx.font = p.size + 'px serif'; ctx.fillText(p.text, p.x, p.y); ctx.restore();
+      }
+      requestAnimationFrame(animate);
+    }
+    animate();
+  })();
+
+  // ========== 加载动画 ==========
+  var loadingProgressFill = document.getElementById('loading-progress-fill');
+  var loadStart = Date.now(), loadDuration = 1500;
+  var loadTimer = setInterval(function() {
+    var elapsed = Date.now() - loadStart;
+    var pct = Math.min(100, Math.round(elapsed / loadDuration * 100));
+    loadingProgressFill.style.width = pct + '%';
+    if (elapsed >= loadDuration) { clearInterval(loadTimer); loadingOverlay.classList.add('hidden'); }
+  }, 50);
+
+  // ========== 全局按钮波纹 ==========
+  document.querySelectorAll('button').forEach(function(btn) {
+    btn.addEventListener('pointerdown', function(e) { addRipple(e, btn); });
+  });
+
+})();
+</script>
+</body>
+</html>
