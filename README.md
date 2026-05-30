@@ -2,6 +2,8 @@
 
 A sweet interactive love confession page — open in any browser, no installation needed.
 
+**🔗 Live Demo:** [danyuyu211.github.io/love-message-box](https://danyuyu211.github.io/love-message-box/)
+
 ## ✨ Features
 
 - **Q&A Card** — "Do you like me?" with a playful "No" button that runs away
